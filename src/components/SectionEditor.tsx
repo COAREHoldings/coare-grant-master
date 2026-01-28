@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useAuth } from '@/contexts/AuthContext';
-import { CheckCircle, AlertCircle, FileText, AlertTriangle, Plus, Trash2, GripVertical, Upload } from 'lucide-react';
+import { CheckCircle, AlertCircle, FileText, AlertTriangle, Plus, Trash2, GripVertical, Upload, ImageIcon, BarChart3 } from 'lucide-react';
 import AISuggestions from './AISuggestions';
 import AICritique from './AICritique';
 import AIMEditor, { Aim, aimsToContent, contentToAims } from './AIMEditor';
@@ -60,6 +60,30 @@ function parseMilestones(content: string): Milestone[] {
 // Sections that should show AI Critique
 const CRITIQUE_ENABLED_SECTIONS = ['specific_aims', 'research_strategy', 'commercialization', 'commercialization_plan'];
 
+// Count figures and estimate their page contribution
+function countFigures(html: string): { count: number; pageContribution: number } {
+  if (typeof window === 'undefined') return { count: 0, pageContribution: 0 };
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const figures = tmp.querySelectorAll('figure, img');
+  let pageContribution = 0;
+  
+  figures.forEach((fig) => {
+    const size = fig.getAttribute('data-size') || 'medium';
+    // Estimate page contribution based on figure size
+    // NIH typically allows ~6 medium figures per page
+    switch (size) {
+      case 'small': pageContribution += 0.1; break;
+      case 'medium': pageContribution += 0.2; break;
+      case 'large': pageContribution += 0.35; break;
+      case 'full': pageContribution += 0.5; break;
+      default: pageContribution += 0.2;
+    }
+  });
+  
+  return { count: figures.length, pageContribution };
+}
+
 export default function SectionEditor({ section, onUpdate, format = 'narrative', grantType = 'Grant' }: Props) {
   const { token } = useAuth();
   const [content, setContent] = useState(section.content || '');
@@ -71,6 +95,8 @@ export default function SectionEditor({ section, onUpdate, format = 'narrative',
   );
   const [saving, setSaving] = useState(false);
   const [pageCount, setPageCount] = useState(section.page_count || 0);
+  const [figureCount, setFigureCount] = useState(0);
+  const [figurePageContribution, setFigurePageContribution] = useState(0);
   const [showPDFUpload, setShowPDFUpload] = useState(false);
   const [editorMode, setEditorMode] = useState<'structured' | 'freeform'>(
     section.type === 'specific_aims' ? 'structured' : 'freeform'
@@ -80,9 +106,14 @@ export default function SectionEditor({ section, onUpdate, format = 'narrative',
   const isSpecificAims = section.type === 'specific_aims';
 
   const estimatePages = (html: string) => {
-    if (!html) return 0;
+    if (!html) return { textPages: 0, totalPages: 0 };
     const text = stripHtml(html);
-    return Math.ceil(text.length / 3000);
+    const textPages = text.length / 3000; // ~3000 chars per page
+    const { count, pageContribution } = countFigures(html);
+    setFigureCount(count);
+    setFigurePageContribution(pageContribution);
+    const totalPages = Math.ceil(textPages + pageContribution);
+    return { textPages: Math.ceil(textPages), totalPages };
   };
 
   const estimateMilestonePages = (ms: Milestone[]) => {
@@ -116,7 +147,8 @@ export default function SectionEditor({ section, onUpdate, format = 'narrative',
 
   const handleChange = (newContent: string) => {
     setContent(newContent);
-    setPageCount(estimatePages(newContent));
+    const { totalPages } = estimatePages(newContent);
+    setPageCount(totalPages);
     saveContent(newContent);
   };
 
@@ -124,7 +156,8 @@ export default function SectionEditor({ section, onUpdate, format = 'narrative',
     setAims(newAims);
     const htmlContent = aimsToContent(newAims);
     setContent(htmlContent);
-    setPageCount(estimatePages(htmlContent));
+    const { totalPages } = estimatePages(htmlContent);
+    setPageCount(totalPages);
     saveContent(htmlContent);
   };
 
@@ -132,7 +165,8 @@ export default function SectionEditor({ section, onUpdate, format = 'narrative',
     setAims(parsedAims);
     const htmlContent = aimsToContent(parsedAims);
     setContent(htmlContent);
-    setPageCount(estimatePages(htmlContent));
+    const { totalPages } = estimatePages(htmlContent);
+    setPageCount(totalPages);
     saveContent(htmlContent);
     setShowPDFUpload(false);
   };
@@ -350,6 +384,13 @@ export default function SectionEditor({ section, onUpdate, format = 'narrative',
           </div>
           <div className="flex items-center gap-3">
             {saving && <span className="text-sm text-slate-500">Saving...</span>}
+            {figureCount > 0 && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm bg-blue-100 text-blue-700">
+                <ImageIcon className="w-4 h-4" />
+                {figureCount} figure{figureCount !== 1 ? 's' : ''}
+                <span className="text-xs text-blue-500">(~{figurePageContribution.toFixed(1)} pg)</span>
+              </div>
+            )}
             {isSpecificAims && (
               <button
                 onClick={() => setShowPDFUpload(!showPDFUpload)}
@@ -485,7 +526,8 @@ export default function SectionEditor({ section, onUpdate, format = 'narrative',
           currentContent={content}
           onRestore={(restoredContent) => {
             setContent(restoredContent);
-            setPageCount(estimatePages(restoredContent));
+            const { totalPages } = estimatePages(restoredContent);
+            setPageCount(totalPages);
             if (isSpecificAims) {
               setAims(contentToAims(restoredContent));
             }
