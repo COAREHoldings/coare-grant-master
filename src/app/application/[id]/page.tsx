@@ -62,6 +62,7 @@ function ApplicationContent() {
   const [showReview, setShowReview] = useState(false);
   const [creStatus, setCreStatus] = useState<'draft' | 'at_risk' | 'needs_revision' | 'competitive'>('draft');
   const [creScore, setCreScore] = useState<number | undefined>(undefined);
+  const [showBiosketch, setShowBiosketch] = useState(false);
 
   // Auto-parse aims from Specific Aims section
   const parseAims = (content: string): { number: number; content: string }[] => {
@@ -302,9 +303,18 @@ function ApplicationContent() {
               isOwner={true}
             />
 
+            <button
+              onClick={() => setShowBiosketch(true)}
+              className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center justify-center gap-2"
+            >
+              <Users className="w-5 h-5" />
+              Generate Biosketch
+            </button>
+
             <BiosketchGenerator 
-              isOpen={true}
-              onClose={() => {}}
+              isOpen={showBiosketch}
+              onClose={() => setShowBiosketch(false)}
+              projectTitle={application.title}
             />
           </div>
 
