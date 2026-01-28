@@ -13,10 +13,11 @@ export function middleware(request: NextRequest) {
   );
   
   if (isProtectedRoute) {
-    // Check for auth token in cookies
-    const authToken = request.cookies.get('auth_token')?.value;
+    // Check for NextAuth session token in cookies
+    const sessionToken = request.cookies.get('next-auth.session-token')?.value 
+      || request.cookies.get('__Secure-next-auth.session-token')?.value;
     
-    if (!authToken) {
+    if (!sessionToken) {
       // Redirect to login page
       const loginUrl = new URL('/', request.url);
       loginUrl.searchParams.set('redirect', pathname);
