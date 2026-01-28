@@ -171,30 +171,30 @@ export default function BiosketchGenerator({ projectTitle, onClose, isOpen }: Pr
         </div>
 
         {/* Tabs */}
-        <div className="border-b px-4">
-          <div className="flex gap-1">
+        <div className="bg-slate-50 border-b px-4 py-2">
+          <div className="flex gap-2">
             <button
               onClick={() => setActiveTab('generate')}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex-1 sm:flex-none px-5 py-3 text-sm font-medium rounded-lg transition-all ${
                 activeTab === 'generate'
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
               }`}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2">
                 <FileText className="w-4 h-4" />
-                Generate
+                Generate New
               </div>
             </button>
             <button
               onClick={() => setActiveTab('verify')}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex-1 sm:flex-none px-5 py-3 text-sm font-medium rounded-lg transition-all ${
                 activeTab === 'verify'
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
               }`}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2">
                 <Upload className="w-4 h-4" />
                 Upload & Verify
               </div>
