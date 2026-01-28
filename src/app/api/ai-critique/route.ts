@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    const validation = validateRequestBody(body);
+    const validation = validateRequestBody(body, true); // Skip content check for AI endpoint
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }

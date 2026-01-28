@@ -88,15 +88,30 @@ export function sanitizeObject<T extends Record<string, unknown>>(obj: T): T {
 
 /**
  * Middleware helper to validate request body
+ * Skips SQL injection check on content/text fields to allow scientific text
  */
-export function validateRequestBody(body: unknown): { valid: boolean; error?: string } {
+export function validateRequestBody(body: unknown, skipContentCheck = false): { valid: boolean; error?: string } {
   if (!body || typeof body !== 'object') {
     return { valid: false, error: 'Invalid request body' };
   }
 
-  const bodyStr = JSON.stringify(body);
-  if (containsSqlInjection(bodyStr)) {
-    return { valid: false, error: 'Invalid input detected' };
+  // If skipContentCheck is true, skip SQL injection validation entirely
+  // This is safe for AI endpoints that don't use raw SQL
+  if (skipContentCheck) {
+    return { valid: true };
+  }
+
+  // For other endpoints, only check non-content fields
+  const bodyObj = body as Record<string, unknown>;
+  for (const key of Object.keys(bodyObj)) {
+    // Skip content/text fields - they may contain scientific text
+    if (['content', 'text', 'body', 'message', 'rewrittenText'].includes(key)) {
+      continue;
+    }
+    const value = bodyObj[key];
+    if (typeof value === 'string' && containsSqlInjection(value)) {
+      return { valid: false, error: 'Invalid input detected' };
+    }
   }
 
   return { valid: true };
