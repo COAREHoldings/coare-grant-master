@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { verifyToken } from '@/lib/auth';
 import { estimatePageCount } from '@/lib/validation';
+import { validateRequestBody } from '@/lib/validate';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -23,7 +24,15 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const { content } = await req.json();
+    const body = await req.json();
+    
+    // Validate request body
+    const validation = validateRequestBody(body);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+    
+    const { content } = body;
 
     // Verify section belongs to user's application
     const sectionResult = await sql`

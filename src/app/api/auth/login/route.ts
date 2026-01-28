@@ -1,15 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { verifyPassword, createToken } from '@/lib/auth';
+import { validateRequestBody, sanitizeInput, isValidEmail } from '@/lib/validate';
 
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json();
+    const body = await req.json();
+    
+    // Validate request body for injection attacks
+    const validation = validateRequestBody(body);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const email = sanitizeInput(body.email || '');
+    const password = body.password || '';
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
+    }
+
+    if (!isValidEmail(email)) {
+      return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
     }
 
     const result = await sql`SELECT * FROM users WHERE email = ${email}`;

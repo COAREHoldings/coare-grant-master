@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { FileText, LogIn, UserPlus, X, Loader2, Mail, Check, AlertCircle } from 'lucide-react';
 
@@ -219,6 +220,16 @@ export default function AuthForm() {
               </button>
             )}
           </form>
+        </div>
+
+        <div className="mt-6 text-center text-sm text-slate-500">
+          <Link href="/terms" className="hover:text-indigo-600 transition">
+            Terms of Service
+          </Link>
+          <span className="mx-2">|</span>
+          <Link href="/privacy" className="hover:text-indigo-600 transition">
+            Privacy Policy
+          </Link>
         </div>
       </div>
 

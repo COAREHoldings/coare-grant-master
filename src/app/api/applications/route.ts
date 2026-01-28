@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { verifyToken } from '@/lib/auth';
 import { MECHANISMS } from '@/lib/mechanisms';
+import { validateRequestBody, sanitizeInput } from '@/lib/validate';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -37,7 +38,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { title, mechanism } = await req.json();
+    const body = await req.json();
+    
+    // Validate request body for injection attacks
+    const validation = validateRequestBody(body);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const title = sanitizeInput(body.title || '');
+    const mechanism = sanitizeInput(body.mechanism || '');
+    
     if (!title || !mechanism) {
       return NextResponse.json({ error: 'Title and mechanism required' }, { status: 400 });
     }

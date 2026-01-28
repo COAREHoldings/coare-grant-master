@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { validateRequestBody, sanitizeInput } from '@/lib/validate';
 
 function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' }); }
 
 export async function POST(request: NextRequest) {
   try {
-    const { content, sectionType, grantType } = await request.json();
+    const body = await request.json();
+    
+    // Validate request body
+    const validation = validateRequestBody(body);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+    
+    const content = body.content || '';
+    const sectionType = sanitizeInput(body.sectionType || '');
+    const grantType = sanitizeInput(body.grantType || '');
 
     if (!content || content.trim().length === 0) {
       return NextResponse.json({ error: 'No content provided' }, { status: 400 });
