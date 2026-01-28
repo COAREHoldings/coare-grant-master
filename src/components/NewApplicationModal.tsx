@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { FUNDING_AGENCIES, getAgencyMechanisms, AgencyType } from '@/lib/mechanisms';
 import { Plus, X, FileText, Info, ChevronLeft } from 'lucide-react';
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function NewApplicationModal({ onCreated }: Props) {
+  const router = useRouter();
   const { token } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -39,11 +41,16 @@ export default function NewApplicationModal({ onCreated }: Props) {
         body: JSON.stringify({ title, mechanism })
       });
       if (!res.ok) throw new Error('Failed to create application');
+      const data = await res.json();
       setIsOpen(false);
       setTitle('');
       setAgency('');
       setMechanism('');
       onCreated();
+      // Navigate to the new application
+      if (data.id) {
+        router.push(`/application/${data.id}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error creating application');
     } finally {
