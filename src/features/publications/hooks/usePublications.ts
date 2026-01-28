@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type {
   Publication,
   Manuscript,
@@ -22,6 +22,32 @@ const initialState: PublicationsState = {
 
 export function usePublications() {
   const [state, setState] = useState<PublicationsState>(initialState);
+
+  // Fetch initial data on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      setState(prev => ({ ...prev, loading: true }));
+      try {
+        const res = await fetch('/api/publications?type=all');
+        if (res.ok) {
+          const data = await res.json();
+          setState(prev => ({
+            ...prev,
+            publications: data.publications || [],
+            manuscripts: data.manuscripts || [],
+            researchProfile: data.profile || null,
+            loading: false,
+          }));
+        } else {
+          setState(prev => ({ ...prev, loading: false }));
+        }
+      } catch (err) {
+        console.error('Failed to fetch publications data:', err);
+        setState(prev => ({ ...prev, loading: false }));
+      }
+    };
+    fetchData();
+  }, []);
 
   const setLoading = useCallback((loading: boolean) => {
     setState(prev => ({ ...prev, loading, error: loading ? null : prev.error }));
@@ -67,19 +93,23 @@ export function usePublications() {
     return result.results as Publication[];
   }, [callApi]);
 
-  const addPublication = useCallback((pub: Publication) => {
+  const addPublication = useCallback(async (pub: Publication) => {
+    const saved = await callApi('add-publication', { publication: pub });
     setState(prev => ({
       ...prev,
-      publications: [...prev.publications, { ...pub, id: pub.id || crypto.randomUUID(), addedAt: new Date().toISOString() }],
+      publications: [...prev.publications, saved],
+      loading: false,
     }));
-  }, []);
+  }, [callApi]);
 
-  const removePublication = useCallback((id: string) => {
+  const removePublication = useCallback(async (id: string) => {
+    await callApi('remove-publication', { id });
     setState(prev => ({
       ...prev,
       publications: prev.publications.filter(p => p.id !== id),
+      loading: false,
     }));
-  }, []);
+  }, [callApi]);
 
   const findLiteratureGaps = useCallback(async (abstract: string, researchArea: string): Promise<{ gaps: LiteratureGap[] }> => {
     const result = await callApi('literature-gaps', { abstract, researchArea });
@@ -106,41 +136,35 @@ export function usePublications() {
   }, [callApi]);
 
   const buildProfile = useCallback(async (): Promise<ResearchProfile> => {
-    const result = await callApi('build-profile', { publications: state.publications });
+    const result = await callApi('build-profile', {});
     setState(prev => ({
       ...prev,
       researchProfile: result,
       loading: false,
     }));
     return result;
-  }, [callApi, state.publications]);
+  }, [callApi]);
 
-  const createManuscript = useCallback((manuscript: Omit<Manuscript, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const newMs: Manuscript = {
-      ...manuscript,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+  const createManuscript = useCallback(async (manuscript: Omit<Manuscript, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const saved = await callApi('save-manuscript', { manuscript });
     setState(prev => ({
       ...prev,
-      manuscripts: [...prev.manuscripts, newMs],
-      currentManuscript: newMs,
+      manuscripts: [...prev.manuscripts, saved],
+      currentManuscript: saved,
+      loading: false,
     }));
-    return newMs;
-  }, []);
+    return saved;
+  }, [callApi]);
 
-  const updateManuscript = useCallback((id: string, updates: Partial<Manuscript>) => {
+  const updateManuscript = useCallback(async (id: string, updates: Partial<Manuscript>) => {
+    const saved = await callApi('save-manuscript', { manuscript: { id, ...updates } });
     setState(prev => ({
       ...prev,
-      manuscripts: prev.manuscripts.map(m =>
-        m.id === id ? { ...m, ...updates, updatedAt: new Date().toISOString() } : m
-      ),
-      currentManuscript: prev.currentManuscript?.id === id
-        ? { ...prev.currentManuscript, ...updates, updatedAt: new Date().toISOString() }
-        : prev.currentManuscript,
+      manuscripts: prev.manuscripts.map(m => m.id === id ? saved : m),
+      currentManuscript: prev.currentManuscript?.id === id ? saved : prev.currentManuscript,
+      loading: false,
     }));
-  }, []);
+  }, [callApi]);
 
   const setCurrentManuscript = useCallback((id: string | null) => {
     setState(prev => ({

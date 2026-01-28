@@ -10,7 +10,7 @@ import type { LiteratureGap, JournalCheckResult } from '../types';
 interface Props {
   manuscript: Manuscript | null;
   onUpdate: (id: string, updates: Partial<Manuscript>) => void;
-  onCreate: (manuscript: Omit<Manuscript, 'id' | 'createdAt' | 'updatedAt'>) => Manuscript;
+  onCreate: (manuscript: Omit<Manuscript, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Manuscript> | void;
   onFindGaps: (abstract: string, researchArea: string) => Promise<{ gaps: LiteratureGap[] }>;
   onCheckJournal: (manuscript: { title: string; abstract: string; wordCount?: number }, targetJournal: string) => Promise<JournalCheckResult>;
   onGenerateCoverLetter: (manuscript: { title: string; abstract: string; highlights?: string[] }, journal: string) => Promise<{ coverLetter: string; wordCount: number }>;

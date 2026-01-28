@@ -1,20 +1,101 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { neon } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-http';
+import { eq, desc } from 'drizzle-orm';
+import { publications, manuscripts, researchProfiles } from '@/lib/schema';
+import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
 import OpenAI from 'openai';
 
 function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
+function getDb() {
+  const sql = neon(process.env.DATABASE_URL!);
+  return drizzle(sql);
+}
+
+async function getUserId(request: NextRequest): Promise<number | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('auth_token')?.value;
+  if (!token) return null;
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: number };
+    return decoded.userId;
+  } catch {
+    return null;
+  }
+}
+
+// GET - Fetch user's publications, manuscripts, and profile
+export async function GET(request: NextRequest) {
+  try {
+    const userId = await getUserId(request);
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const db = getDb();
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type') || 'all';
+
+    if (type === 'publications' || type === 'all') {
+      const pubs = await db.select().from(publications).where(eq(publications.userId, userId)).orderBy(desc(publications.createdAt));
+      if (type === 'publications') return NextResponse.json({ publications: pubs });
+    }
+
+    if (type === 'manuscripts' || type === 'all') {
+      const mss = await db.select().from(manuscripts).where(eq(manuscripts.userId, userId)).orderBy(desc(manuscripts.createdAt));
+      if (type === 'manuscripts') return NextResponse.json({ manuscripts: mss });
+    }
+
+    if (type === 'profile' || type === 'all') {
+      const profiles = await db.select().from(researchProfiles).where(eq(researchProfiles.userId, userId));
+      const profile = profiles[0] || null;
+      if (type === 'profile') return NextResponse.json({ profile });
+    }
+
+    // Return all
+    const [pubs, mss, profiles] = await Promise.all([
+      db.select().from(publications).where(eq(publications.userId, userId)).orderBy(desc(publications.createdAt)),
+      db.select().from(manuscripts).where(eq(manuscripts.userId, userId)).orderBy(desc(manuscripts.createdAt)),
+      db.select().from(researchProfiles).where(eq(researchProfiles.userId, userId)),
+    ]);
+
+    return NextResponse.json({
+      publications: pubs,
+      manuscripts: mss,
+      profile: profiles[0] || null,
+    });
+  } catch (error) {
+    console.error('GET publications error:', error);
+    return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getUserId(request);
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { action, ...data } = body;
+    const db = getDb();
 
     switch (action) {
       case 'import-doi':
-        return handleImportDOI(data.doi);
+        return handleImportDOI(db, userId, data.doi);
+      case 'add-publication':
+        return handleAddPublication(db, userId, data.publication);
+      case 'remove-publication':
+        return handleRemovePublication(db, userId, data.id);
       case 'search-pubmed':
         return handleSearchPubMed(data.query, data.maxResults);
+      case 'save-manuscript':
+        return handleSaveManuscript(db, userId, data.manuscript);
       case 'literature-gaps':
         return handleLiteratureGaps(data.abstract, data.researchArea);
       case 'journal-check':
@@ -24,7 +105,7 @@ export async function POST(request: NextRequest) {
       case 'revision-response':
         return handleRevisionResponse(data.comments, data.manuscriptChanges);
       case 'build-profile':
-        return handleBuildProfile(data.publications);
+        return handleBuildProfile(db, userId);
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
@@ -37,8 +118,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handleImportDOI(doi: string) {
-  // Fetch from CrossRef API
+async function handleImportDOI(db: ReturnType<typeof getDb>, userId: number, doi: string) {
   const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}`, {
     headers: { 'User-Agent': 'GrantMaster/1.0 (mailto:support@grantmaster.com)' },
   });
@@ -51,7 +131,7 @@ async function handleImportDOI(doi: string) {
   const work = data.message;
 
   const publication = {
-    id: crypto.randomUUID(),
+    userId,
     doi: doi,
     title: work.title?.[0] || 'Unknown Title',
     authors: work.author?.map((a: { given?: string; family?: string; affiliation?: { name: string }[] }) => ({
@@ -60,19 +140,38 @@ async function handleImportDOI(doi: string) {
     })) || [],
     journal: work['container-title']?.[0] || work.publisher || 'Unknown Journal',
     year: work.published?.['date-parts']?.[0]?.[0] || work.created?.['date-parts']?.[0]?.[0] || new Date().getFullYear(),
-    volume: work.volume,
-    issue: work.issue,
-    pages: work.page,
-    abstract: work.abstract?.replace(/<[^>]*>/g, ''),
+    volume: work.volume || null,
+    issue: work.issue || null,
+    pages: work.page || null,
+    abstract: work.abstract?.replace(/<[^>]*>/g, '') || null,
     citationCount: work['is-referenced-by-count'] || 0,
-    addedAt: new Date().toISOString(),
   };
 
-  return NextResponse.json(publication);
+  const result = await db.insert(publications).values(publication).returning();
+  return NextResponse.json(result[0]);
+}
+
+async function handleAddPublication(db: ReturnType<typeof getDb>, userId: number, pub: Record<string, unknown>) {
+  const result = await db.insert(publications).values({
+    userId,
+    title: pub.title as string,
+    authors: pub.authors as { name: string }[] || [],
+    journal: pub.journal as string || null,
+    year: pub.year as number || null,
+    pmid: pub.pmid as string || null,
+    doi: pub.doi as string || null,
+    citationCount: pub.citationCount as number || 0,
+    abstract: pub.abstract as string || null,
+  }).returning();
+  return NextResponse.json(result[0]);
+}
+
+async function handleRemovePublication(db: ReturnType<typeof getDb>, userId: number, id: string) {
+  await db.delete(publications).where(eq(publications.id, id));
+  return NextResponse.json({ success: true });
 }
 
 async function handleSearchPubMed(query: string, maxResults = 10) {
-  // Search PubMed via NCBI E-utilities
   const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmax=${maxResults}&retmode=json`;
   const searchRes = await fetch(searchUrl);
   const searchData = await searchRes.json();
@@ -82,7 +181,6 @@ async function handleSearchPubMed(query: string, maxResults = 10) {
     return NextResponse.json({ results: [] });
   }
 
-  // Fetch details for each ID
   const detailUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${ids.join(',')}&retmode=json`;
   const detailRes = await fetch(detailUrl);
   const detailData = await detailRes.json();
@@ -105,23 +203,52 @@ async function handleSearchPubMed(query: string, maxResults = 10) {
   return NextResponse.json({ results });
 }
 
+async function handleSaveManuscript(db: ReturnType<typeof getDb>, userId: number, manuscript: Record<string, unknown>) {
+  const id = manuscript.id as string | undefined;
+
+  if (id) {
+    const result = await db.update(manuscripts)
+      .set({
+        title: manuscript.title as string,
+        targetJournal: manuscript.targetJournal as string || null,
+        coAuthors: manuscript.coAuthors as { name: string }[] || [],
+        content: manuscript.content as Record<string, string> || {},
+        status: manuscript.status as string || 'draft',
+        updatedAt: new Date(),
+      })
+      .where(eq(manuscripts.id, id))
+      .returning();
+    return NextResponse.json(result[0]);
+  } else {
+    const result = await db.insert(manuscripts).values({
+      userId,
+      title: manuscript.title as string,
+      targetJournal: manuscript.targetJournal as string || null,
+      coAuthors: manuscript.coAuthors as { name: string }[] || [],
+      content: manuscript.content as Record<string, string> || {},
+      status: 'draft',
+    }).returning();
+    return NextResponse.json(result[0]);
+  }
+}
+
 async function handleLiteratureGaps(abstract: string, researchArea: string) {
   const completion = await getOpenAI().chat.completions.create({
     model: 'gpt-4o',
     messages: [
       {
         role: 'system',
-        content: `You are a scientific literature expert. Analyze the research abstract and identify gaps in the literature that could be addressed. Return JSON array of gaps.`,
+        content: `You are a scientific literature expert. Analyze the research abstract and identify gaps in the literature. Return JSON with "gaps" array containing objects with "gap", "relevance" (high/medium/low), and "suggestedApproach" fields.`,
       },
       {
         role: 'user',
-        content: `Research Area: ${researchArea}\n\nAbstract: ${abstract}\n\nIdentify 3-5 literature gaps with relevance levels (high/medium/low) and suggested approaches.`,
+        content: `Research Area: ${researchArea}\n\nAbstract: ${abstract}\n\nIdentify 3-5 literature gaps.`,
       },
     ],
     response_format: { type: 'json_object' },
   });
 
-  const result = JSON.parse(completion.choices[0].message.content || '{}');
+  const result = JSON.parse(completion.choices[0].message.content || '{"gaps":[]}');
   return NextResponse.json(result);
 }
 
@@ -131,11 +258,11 @@ async function handleJournalCheck(manuscript: { title: string; abstract: string;
     messages: [
       {
         role: 'system',
-        content: `You are a journal submission expert. Check if the manuscript meets typical requirements for the target journal. Return JSON with compliance items, overall score (0-100), and recommendation.`,
+        content: `You are a journal submission expert. Return JSON with "compliance" array (objects with requirement, status pass/fail/warning, details), "overallScore" (0-100), and "recommendation" string.`,
       },
       {
         role: 'user',
-        content: `Target Journal: ${targetJournal}\n\nManuscript Title: ${manuscript.title}\n\nAbstract: ${manuscript.abstract}\n\nWord Count: ${manuscript.wordCount || 'Unknown'}\n\nCheck compliance with typical journal requirements (scope, format, length, etc.)`,
+        content: `Target Journal: ${targetJournal}\nTitle: ${manuscript.title}\nAbstract: ${manuscript.abstract}\nWord Count: ${manuscript.wordCount || 'Unknown'}`,
       },
     ],
     response_format: { type: 'json_object' },
@@ -151,11 +278,11 @@ async function handleCoverLetter(manuscript: { title: string; abstract: string; 
     messages: [
       {
         role: 'system',
-        content: `You are an expert at writing journal submission cover letters. Write a professional, concise cover letter that highlights the manuscript's significance and fit for the journal.`,
+        content: `Write a professional journal submission cover letter. Be concise and highlight significance.`,
       },
       {
         role: 'user',
-        content: `Journal: ${journal}\n\nManuscript Title: ${manuscript.title}\n\nAbstract: ${manuscript.abstract}\n\nKey Highlights: ${highlights?.join('; ') || manuscript.highlights?.join('; ') || 'See abstract'}\n\nWrite a cover letter for submission.`,
+        content: `Journal: ${journal}\nTitle: ${manuscript.title}\nAbstract: ${manuscript.abstract}\nHighlights: ${highlights?.join('; ') || manuscript.highlights?.join('; ') || 'See abstract'}`,
       },
     ],
   });
@@ -172,25 +299,30 @@ async function handleRevisionResponse(comments: { reviewer: string; comment: str
     messages: [
       {
         role: 'system',
-        content: `You are an expert at writing point-by-point responses to peer reviewers. Be professional, thorough, and constructive. Address each comment directly.`,
+        content: `Generate point-by-point responses to peer reviewers. Return JSON with "responses" array containing objects with "commentId" (index as string) and "response" fields.`,
       },
       {
         role: 'user',
-        content: `Reviewer Comments:\n${comments.map((c, i) => `${i + 1}. [${c.reviewer}] (${c.category}): ${c.comment}`).join('\n\n')}\n\n${manuscriptChanges ? `Changes Made:\n${manuscriptChanges}` : ''}\n\nGenerate point-by-point responses to each reviewer comment.`,
+        content: `Comments:\n${comments.map((c, i) => `${i}. [${c.reviewer}] (${c.category}): ${c.comment}`).join('\n\n')}\n\n${manuscriptChanges ? `Changes: ${manuscriptChanges}` : ''}`,
       },
     ],
     response_format: { type: 'json_object' },
   });
 
-  const result = JSON.parse(completion.choices[0].message.content || '{}');
+  const result = JSON.parse(completion.choices[0].message.content || '{"responses":[]}');
   return NextResponse.json(result);
 }
 
-async function handleBuildProfile(publications: { title: string; authors: { name: string }[]; year: number; citationCount?: number; abstract?: string }[]) {
+async function handleBuildProfile(db: ReturnType<typeof getDb>, userId: number) {
+  // Fetch user's publications
+  const pubs = await db.select().from(publications).where(eq(publications.userId, userId));
+
+  if (pubs.length === 0) {
+    return NextResponse.json({ error: 'No publications to analyze' }, { status: 400 });
+  }
+
   // Calculate h-index
-  const sortedCitations = publications
-    .map(p => p.citationCount || 0)
-    .sort((a, b) => b - a);
+  const sortedCitations = pubs.map(p => p.citationCount || 0).sort((a, b) => b - a);
   let hIndex = 0;
   for (let i = 0; i < sortedCitations.length; i++) {
     if (sortedCitations[i] >= i + 1) hIndex = i + 1;
@@ -198,34 +330,12 @@ async function handleBuildProfile(publications: { title: string; authors: { name
   }
 
   const totalCitations = sortedCitations.reduce((sum, c) => sum + c, 0);
+  const topCited = [...pubs].sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0)).slice(0, 5);
 
-  // Get top cited works
-  const topCited = [...publications]
-    .sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0))
-    .slice(0, 5);
-
-  // Extract themes and collaborators using AI
-  const completion = await getOpenAI().chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      {
-        role: 'system',
-        content: `Analyze the publications and extract research themes. Also generate NIH Biosketch Section C (contribution to science) and Section D (research support) text based on the publications. Return JSON.`,
-      },
-      {
-        role: 'user',
-        content: `Publications:\n${publications.map(p => `- ${p.title} (${p.year}): ${p.abstract?.slice(0, 200) || 'No abstract'}`).join('\n')}\n\nExtract research themes and generate biosketch sections.`,
-      },
-    ],
-    response_format: { type: 'json_object' },
-  });
-
-  const aiResult = JSON.parse(completion.choices[0].message.content || '{}');
-
-  // Count collaborators
+  // Collaborators
   const collaboratorCounts: Record<string, number> = {};
-  publications.forEach(p => {
-    p.authors?.forEach(a => {
+  pubs.forEach(p => {
+    (p.authors as { name: string }[] || []).forEach(a => {
       collaboratorCounts[a.name] = (collaboratorCounts[a.name] || 0) + 1;
     });
   });
@@ -236,15 +346,34 @@ async function handleBuildProfile(publications: { title: string; authors: { name
 
   // Yearly output
   const yearlyCounts: Record<number, number> = {};
-  publications.forEach(p => {
-    yearlyCounts[p.year] = (yearlyCounts[p.year] || 0) + 1;
+  pubs.forEach(p => {
+    if (p.year) yearlyCounts[p.year] = (yearlyCounts[p.year] || 0) + 1;
   });
   const yearlyOutput = Object.entries(yearlyCounts)
     .map(([year, count]) => ({ year: parseInt(year), count }))
     .sort((a, b) => a.year - b.year);
 
-  return NextResponse.json({
-    totalPublications: publications.length,
+  // AI analysis for themes and biosketch
+  const completion = await getOpenAI().chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      {
+        role: 'system',
+        content: `Analyze publications and extract research themes. Generate NIH Biosketch Section C (contribution to science) and Section D (research support). Return JSON with "themes" array (objects with theme, count), "sectionC" string, "sectionD" string.`,
+      },
+      {
+        role: 'user',
+        content: `Publications:\n${pubs.map(p => `- ${p.title} (${p.year}): ${p.abstract?.slice(0, 200) || 'No abstract'}`).join('\n')}`,
+      },
+    ],
+    response_format: { type: 'json_object' },
+  });
+
+  const aiResult = JSON.parse(completion.choices[0].message.content || '{}');
+
+  const profileData = {
+    userId,
+    totalPublications: pubs.length,
     hIndex,
     totalCitations,
     topCitedWorks: topCited,
@@ -253,5 +382,17 @@ async function handleBuildProfile(publications: { title: string; authors: { name
     yearlyOutput,
     biosketchSectionC: aiResult.sectionC || '',
     biosketchSectionD: aiResult.sectionD || '',
-  });
+    updatedAt: new Date(),
+  };
+
+  // Upsert profile
+  const existing = await db.select().from(researchProfiles).where(eq(researchProfiles.userId, userId));
+  
+  if (existing.length > 0) {
+    const result = await db.update(researchProfiles).set(profileData).where(eq(researchProfiles.userId, userId)).returning();
+    return NextResponse.json(result[0]);
+  } else {
+    const result = await db.insert(researchProfiles).values(profileData).returning();
+    return NextResponse.json(result[0]);
+  }
 }
