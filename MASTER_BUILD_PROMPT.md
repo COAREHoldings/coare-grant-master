@@ -153,6 +153,76 @@ Build **Grant Master**, a production-ready SaaS platform that helps researchers 
 
 ---
 
+### 7. Publications & Manuscript Module (Modular Feature)
+
+**Location:** `/src/features/publications/` (isolated, removable module)
+
+**Entry Points:** Publications can be the FIRST interaction (import existing work) OR the OUTPUT of funded grants.
+
+#### 7.1 Import Publications
+- Enter DOI → fetch metadata from CrossRef
+- Search PubMed by author name → select papers
+- Manual entry for preprints/unpublished
+- Bulk import support
+
+#### 7.2 Research Profile Builder
+From imported publications, AI extracts:
+- Research themes/expertise areas
+- H-index calculation
+- Top cited works
+- Collaboration network
+- Auto-generate Biosketch Sections C & D
+
+#### 7.3 Manuscript Assistant (6 Steps)
+- **Step 1: Setup** - Link to grant, target journal, co-authors, deadline
+- **Step 2: Literature Helper** - Gap finder, citation suggester, novelty check
+- **Step 3: IMRAD Builder** - AI assistance for Introduction, Methods, Results, Discussion
+- **Step 4: Journal Fit** - Semantic matching to find best-fit journals
+- **Step 5: Compliance Check** - Word limits, figure limits, formatting
+- **Step 6: Pre-Submission** - Cover letter, highlights, reviewer suggestions
+
+#### 7.4 Journal Fit & Intelligence Engine
+**Input:**
+- Abstract (required)
+- Keywords (optional)
+- Manuscript metadata: sample size, model systems, validation cohorts, clinical data
+
+**Scoring:**
+- Semantic fit score (embedding similarity with journal scope)
+- Impact Competitiveness Score per tier (High/Mid/Emerging)
+- 4 factors: Dataset Scale, Mechanistic Depth, Validation, Translational Depth
+
+**Output:**
+- Top 5 ranked journals with fit score (0-100)
+- Impact tier badges
+- Competitiveness bands: Prestige Mismatch (0-40), Stretch (41-65), Competitive (66-80), Strongly Aligned (81-100)
+- Color-coded indicators (Red/Yellow/Green)
+- Similar PubMed articles per journal
+
+**Static Journal Database:** 20-25 curated journals with:
+- name, publisher, impact_factor, impact_tier, aims_scope, word_limit, figure_limit, open_access_fee, submission_url
+
+**Disclaimer:** "Heuristic competitiveness index. Not acceptance probability."
+
+#### 7.5 Peer Review Response (Reuses Resubmission Pattern)
+- Upload decision letter + reviewer comments
+- AI parses each reviewer's critiques
+- Categorize: Major | Minor | Editorial
+- Generate point-by-point response draft
+- Track manuscript changes
+- Generate response letter
+
+#### 7.6 Grant-Publication Linker
+- Connect publications back to funding source
+- Track deliverables (promised vs published)
+- Auto-generate acknowledgment text with grant numbers
+- Progress reports for renewals
+
+**API:** Single endpoint `/api/publications` with actions:
+- "import-doi" | "search-pubmed" | "journal-fit" | "build-profile" | "literature-gaps" | "cover-letter" | "revision-response"
+
+---
+
 ## Production Hardening
 
 ### Security
@@ -229,6 +299,46 @@ CREATE TABLE usage_logs (
   tokens_used INTEGER,
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Publications
+CREATE TABLE publications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  pmid VARCHAR(20),
+  pmcid VARCHAR(20),
+  doi VARCHAR(100) UNIQUE,
+  title TEXT,
+  authors JSONB,
+  journal VARCHAR(255),
+  year INTEGER,
+  citation_count INTEGER,
+  abstract TEXT,
+  keywords JSONB,
+  research_themes JSONB,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Manuscripts
+CREATE TABLE manuscripts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  grant_id UUID REFERENCES applications(id),
+  title VARCHAR(500),
+  status VARCHAR(50) DEFAULT 'draft',
+  target_journal VARCHAR(255),
+  co_authors JSONB,
+  content JSONB,
+  submission_date DATE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Grant-Publication Links
+CREATE TABLE grant_publications (
+  grant_id UUID REFERENCES applications(id),
+  publication_id UUID REFERENCES publications(id),
+  relationship VARCHAR(50),
+  PRIMARY KEY (grant_id, publication_id)
+);
 ```
 
 ---
@@ -283,9 +393,14 @@ NEXT_PUBLIC_SENTRY_DSN=https://...
 ├── contexts/
 │   └── AuthContext.tsx
 ├── features/
-│   └── resubmission/
+│   ├── resubmission/
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   └── types.ts
+│   └── publications/
 │       ├── components/
 │       ├── hooks/
+│       ├── data/journals.ts
 │       └── types.ts
 ├── lib/
 │   ├── db.ts
@@ -323,6 +438,10 @@ NEXT_PUBLIC_SENTRY_DSN=https://...
 - [ ] Review simulation provides realistic scores
 - [ ] Biosketch generator and verifier functional
 - [ ] Resubmission 7-step wizard complete
+- [ ] Publications import (DOI/PubMed) works
+- [ ] Journal Fit scoring with tier badges
+- [ ] Manuscript wizard functional
+- [ ] Grant-publication linking works
 - [ ] All disclaimers displayed
 - [ ] Route protection working
 - [ ] Error monitoring active
