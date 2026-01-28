@@ -8,6 +8,7 @@ import SectionEditor from '@/components/SectionEditor';
 import AttachmentChecklist from '@/components/AttachmentChecklist';
 import ValidationPanel from '@/components/ValidationPanel';
 import ReviewerSimulation from '@/components/ReviewerSimulation';
+import StudySectionRecommender from '@/components/StudySectionRecommender';
 import { MECHANISMS, getFormatting } from '@/lib/mechanisms';
 import { ArrowLeft, FileText, Info, Users } from 'lucide-react';
 import Link from 'next/link';
@@ -219,6 +220,12 @@ function ApplicationContent() {
               applicationId={application.id} 
               onExportPDF={handleExportPDF}
               onExportZip={handleExportZip}
+            />
+
+            <StudySectionRecommender
+              title={application.title}
+              specificAims={sections.find(s => s.type === 'specific_aims')?.content || ''}
+              researchStrategy={sections.find(s => s.type === 'research_strategy')?.content || ''}
             />
           </div>
 
