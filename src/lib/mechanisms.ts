@@ -1,7 +1,7 @@
 export interface MechanismConfig {
   id: string;
   name: string;
-  agency: 'NIH' | 'DOD_CDMRP' | 'CPRIT';
+  agency: 'NIH' | 'DOD_CDMRP' | 'CPRIT' | 'NSF';
   program?: string;
   description: string;
   sections: SectionConfig[];
@@ -358,6 +358,29 @@ export const MECHANISMS: Record<string, MechanismConfig> = {
       { name: 'IP Assessment', required: true, description: 'Intellectual property status' },
     ],
   },
+  // ============ NSF MECHANISMS ============
+  'NSF_SBIR_I': {
+    id: 'NSF_SBIR_I',
+    name: 'NSF SBIR/STTR Phase I',
+    agency: 'NSF',
+    description: 'Small Business Innovation Research Phase I - Feasibility study up to $275,000 for 6-12 months',
+    sections: [
+      { type: 'specific_aims', title: 'Specific Aims', pageLimit: 1, description: 'State objectives and specific aims' },
+      { type: 'project_description', title: 'Project Description', pageLimit: 15, requiredHeadings: ['Intellectual Merit', 'Broader Impacts', 'Technical Objectives', 'Research Plan'], description: 'Technical plan covering intellectual merit and broader impacts' },
+      { type: 'commercialization_plan', title: 'Commercialization Plan', pageLimit: 10, description: 'Market analysis, competition, and commercialization strategy' },
+    ],
+    attachments: [
+      { name: 'Cover Sheet', required: true, description: 'NSF SBIR/STTR cover sheet' },
+      { name: 'Project Summary', required: true, description: '1 page max with Intellectual Merit and Broader Impacts' },
+      { name: 'Biographical Sketch', required: true, description: 'For PI and key personnel (NSF format)' },
+      { name: 'Budget Justification', required: true, description: 'Detailed budget narrative' },
+      { name: 'Facilities & Equipment', required: true, description: 'Available resources' },
+      { name: 'Data Management Plan', required: true, description: 'Plan for data sharing and management' },
+      { name: 'Company Commercialization History', required: true, description: 'Prior NSF SBIR/STTR awards and outcomes' },
+      { name: 'Letters of Support', required: false, description: 'From customers, partners, or collaborators' },
+    ],
+  },
+
   'CPRIT_PDRA': {
     id: 'CPRIT_PDRA',
     name: 'CPRIT Product Development Research Award',
@@ -416,16 +439,27 @@ export const FUNDING_AGENCIES = {
   NIH: { id: 'NIH', name: 'National Institutes of Health (NIH)', description: 'Federal biomedical research agency' },
   DOD_CDMRP: { id: 'DOD_CDMRP', name: 'DoD CDMRP', description: 'Department of Defense medical research programs' },
   CPRIT: { id: 'CPRIT', name: 'CPRIT', description: 'Cancer Prevention and Research Institute of Texas' },
+  NSF: { id: 'NSF', name: 'National Science Foundation (NSF)', description: 'Federal agency supporting science and engineering research' },
 };
 
-export type AgencyType = 'NIH' | 'DOD_CDMRP' | 'CPRIT';
+export type AgencyType = 'NIH' | 'DOD_CDMRP' | 'CPRIT' | 'NSF';
 
 export function getAgencyMechanisms(agency: AgencyType): MechanismConfig[] {
   return Object.values(MECHANISMS).filter(m => m.agency === agency);
 }
 
+// NSF formatting
+export const NSF_FORMATTING = {
+  margins: '1 inch',
+  font: 'Arial, Courier New, Palatino Linotype, or Georgia',
+  fontSize: 11,
+  lineSpacing: 'single',
+  headerFooter: 'Include page numbers',
+};
+
 export function getFormatting(agency: AgencyType) {
   if (agency === 'NIH') return NIH_FORMATTING;
   if (agency === 'CPRIT') return CPRIT_FORMATTING;
+  if (agency === 'NSF') return NSF_FORMATTING;
   return DOD_FORMATTING;
 }
