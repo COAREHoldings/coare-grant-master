@@ -48,8 +48,8 @@ export default function NewApplicationModal({ onCreated }: Props) {
       setMechanism('');
       onCreated();
       // Navigate to the new application
-      if (data.id) {
-        router.push(`/application/${data.id}`);
+      if (data.application?.id) {
+        router.push(`/application/${data.application.id}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error creating application');
