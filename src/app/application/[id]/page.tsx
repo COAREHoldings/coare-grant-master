@@ -63,6 +63,34 @@ function ApplicationContent() {
   const [creStatus, setCreStatus] = useState<'draft' | 'at_risk' | 'needs_revision' | 'competitive'>('draft');
   const [creScore, setCreScore] = useState<number | undefined>(undefined);
 
+  // Auto-parse aims from Specific Aims section
+  const parseAims = (content: string): { number: number; content: string }[] => {
+    if (!content) return [];
+    const aims: { number: number; content: string }[] = [];
+    // Match patterns like "Aim 1:", "Specific Aim 1.", "SA1:", etc.
+    const aimPattern = /(?:Specific\s+)?Aim\s*(\d+)[:.\s]/gi;
+    const matches = [...content.matchAll(aimPattern)];
+    
+    for (let i = 0; i < matches.length; i++) {
+      const start = matches[i].index!;
+      const end = matches[i + 1]?.index || content.length;
+      aims.push({
+        number: parseInt(matches[i][1]),
+        content: content.slice(start, end).trim()
+      });
+    }
+    return aims.length > 0 ? aims : [{ number: 1, content: content.slice(0, 2000) }];
+  };
+
+  const handleCREScoreUpdate = (score: number, status: string) => {
+    setCreScore(score);
+    if (status === 'competitive') setCreStatus('competitive');
+    else if (status === 'needs_revision') setCreStatus('needs_revision');
+    else if (status === 'high_risk') setCreStatus('at_risk');
+  };
+
+  const parsedAims = parseAims(sections.find(s => s.type === 'specific_aims')?.content || '');
+
   const fetchApplication = useCallback(async () => {
     if (!token || !params.id) return;
     try {
@@ -245,6 +273,8 @@ function ApplicationContent() {
               specificAims={sections.find(s => s.type === 'specific_aims')?.content || ''}
               researchStrategy={sections.find(s => s.type === 'research_strategy')?.content || ''}
               mechanism={application.mechanism}
+              applicationId={application.id}
+              onScoreUpdate={handleCREScoreUpdate}
             />
 
             <StudySectionRecommender
@@ -262,6 +292,10 @@ function ApplicationContent() {
               specificAims={sections.find(s => s.type === 'specific_aims')?.content || ''}
               researchStrategy={sections.find(s => s.type === 'research_strategy')?.content || ''}
             />
+
+            <StatisticalAdequacy aims={parsedAims} />
+
+            <MechanisticDepth aims={parsedAims} mechanism={application.mechanism} />
 
             <Collaborators
               applicationId={application.id}

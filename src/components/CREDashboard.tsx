@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BarChart3, RefreshCw, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
+import { BarChart3, RefreshCw, TrendingUp, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CREDashboardProps {
   title: string;
@@ -9,6 +10,8 @@ interface CREDashboardProps {
   researchStrategy: string;
   hypothesis?: string;
   mechanism: string;
+  applicationId: number;
+  onScoreUpdate?: (score: number, status: string) => void;
 }
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -20,24 +23,43 @@ const DOMAIN_LABELS: Record<string, string> = {
   fundingAlignment: 'Funding Alignment'
 };
 
-export default function CREDashboard({ title, specificAims, researchStrategy, hypothesis, mechanism }: CREDashboardProps) {
+export default function CREDashboard({ title, specificAims, researchStrategy, hypothesis, mechanism, applicationId, onScoreUpdate }: CREDashboardProps) {
+  const { token } = useAuth();
   const [scores, setScores] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
 
   const runAnalysis = async () => {
     if (!specificAims && !researchStrategy) return;
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/cre-score', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, specificAims, researchStrategy, hypothesis, mechanism })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ title, specificAims, researchStrategy, hypothesis, mechanism, applicationId })
       });
       const data = await res.json();
+      
+      if (res.status === 429) {
+        setError(data.error || 'Rate limit reached');
+        return;
+      }
+      if (!res.ok) {
+        setError(data.error || 'Analysis failed');
+        return;
+      }
+      
       setScores(data);
-    } catch (error) {
-      console.error('CRE analysis failed:', error);
+      if (onScoreUpdate) {
+        onScoreUpdate(data.overallScore, data.readinessStatus);
+      }
+    } catch (err) {
+      setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -79,6 +101,13 @@ export default function CREDashboard({ title, specificAims, researchStrategy, hy
       </div>
 
       <div className="p-3">
+        {error && (
+          <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            {error}
+          </div>
+        )}
+
         {!scores ? (
           <button
             onClick={runAnalysis}
@@ -95,6 +124,13 @@ export default function CREDashboard({ title, specificAims, researchStrategy, hy
               <div className="text-xs text-slate-500 mb-2">Overall Score</div>
               {getStatusBadge(scores.readinessStatus)}
             </div>
+
+            {/* Remaining quota */}
+            {scores.remaining && (
+              <div className="text-[10px] text-slate-400 text-center">
+                {scores.remaining.requests} requests remaining today
+              </div>
+            )}
 
             {/* Domain Scores */}
             <div className="space-y-2 pt-3 border-t">

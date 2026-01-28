@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { verifyToken } from '@/lib/auth';
+import { checkRateLimit, trackUsage, estimateTokens } from '@/lib/rateLimit';
+import { neon } from '@neondatabase/serverless';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const sql = neon(process.env.DATABASE_URL!);
 
 const WEIGHTS = {
   hypothesisClarity: 0.20,
@@ -14,7 +18,22 @@ const WEIGHTS = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { title, specificAims, researchStrategy, hypothesis, mechanism } = await request.json();
+    // Auth check
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    const user = token ? await verifyToken(token) : null;
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limit check
+    const rateCheck = await checkRateLimit(user.userId);
+    if (!rateCheck.allowed) {
+      return NextResponse.json({ error: rateCheck.reason, rateLimited: true }, { status: 429 });
+    }
+
+    const { title, specificAims, researchStrategy, hypothesis, mechanism, applicationId } = await request.json();
 
     const prompt = `You are an expert NIH grant reviewer. Score this ${mechanism} application on each domain (0-100):
 
@@ -36,11 +55,18 @@ Score each domain and explain:
   "revisionPriorities": ["ordered list of what to fix first"]
 }`;
 
+    const inputTokens = estimateTokens(prompt);
+
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' }
     });
+
+    const outputTokens = completion.usage?.completion_tokens || estimateTokens(completion.choices[0].message.content || '');
+    
+    // Track usage
+    await trackUsage(user.userId, 'cre-score', inputTokens, outputTokens);
 
     const scores = JSON.parse(completion.choices[0].message.content || '{}');
     
@@ -58,11 +84,32 @@ Score each domain and explain:
     if (overallScore >= 75) readinessStatus = 'competitive';
     else if (overallScore >= 55) readinessStatus = 'needs_revision';
 
+    // Persist score to database
+    if (applicationId) {
+      await sql`
+        INSERT INTO cre_scores (
+          application_id, hypothesis_clarity, novelty, mechanistic_depth,
+          statistical_rigor, feasibility, funding_alignment, overall_score, readiness_status
+        ) VALUES (
+          ${applicationId},
+          ${scores.hypothesisClarity?.score || 0},
+          ${scores.novelty?.score || 0},
+          ${scores.mechanisticDepth?.score || 0},
+          ${scores.statisticalRigor?.score || 0},
+          ${scores.feasibility?.score || 0},
+          ${scores.fundingAlignment?.score || 0},
+          ${overallScore},
+          ${readinessStatus}
+        )
+      `;
+    }
+
     return NextResponse.json({
       ...scores,
       overallScore,
       readinessStatus,
-      weights: WEIGHTS
+      weights: WEIGHTS,
+      remaining: rateCheck.remaining
     });
   } catch (error) {
     console.error('CRE score error:', error);
