@@ -12,10 +12,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center">
-              <FileText className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-semibold text-slate-900">NIH Grant Master</span>
+            <img src="/logo.png" alt="NIH Grant Master" className="h-9" />
           </Link>
 
           {user && (
