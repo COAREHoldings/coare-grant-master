@@ -21,29 +21,52 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Name and position required' }, { status: 400 });
     }
 
-    const systemPrompt = `You are an expert at writing NIH Biographical Sketches (Biosketches). 
-Generate a professional NIH-format biosketch based on the provided information.
+    const systemPrompt = `You are an expert at writing NIH Biographical Sketches following the 2025 Common Forms format.
 
-NIH Biosketch Format (5 pages max):
-1. **Personal Statement** (up to 4 paragraphs) - Why you're suited for this project
-2. **Positions, Scientific Appointments, and Honors** - Reverse chronological
-3. **Contributions to Science** (up to 5 contributions, 4 pubs each) - Most significant work
-4. **Research Support** - Active and recent completed (last 3 years)
+As of May 25, 2025, NIH requires TWO documents:
+1. **Biographical Sketch Common Form** (shared across federal agencies)
+2. **NIH Biographical Sketch Supplement** (NIH-specific)
 
-Guidelines:
-- Use third person for sections 2-4
-- First person acceptable in Personal Statement
-- Be specific about contributions and impact
-- Highlight leadership and collaboration
-- Connect experience to the proposed project
-- Follow NIH formatting (no headers in Personal Statement)`;
+=== BIOGRAPHICAL SKETCH COMMON FORM (3 pages max) ===
+Section A: Personal Information
+- Name, eRA Commons ID, Position Title, Organization
 
-    const userPrompt = `Generate an NIH Biosketch for:
+Section B: Education and Training
+- Institution, Location, Degree, Completion Date, Field of Study
+
+Section C: Positions, Scientific Appointments, and Honors
+- In reverse chronological order
+- Include academic/professional appointments, honors, memberships
+
+Section D: Scholastic Performance (fellowships only - skip for regular applications)
+
+=== NIH BIOGRAPHICAL SKETCH SUPPLEMENT (2 pages max) ===
+Section A: Personal Statement
+- Up to 4 paragraphs explaining qualifications for this specific project
+- First person allowed
+- Include up to 4 relevant publications/products
+
+Section B: Contributions to Science
+- Up to 5 contributions with narrative description
+- Up to 4 citations per contribution
+- Describe your specific role and the contribution's impact
+
+Section C: Additional Information (optional)
+- Research support, synergistic activities, URLs to full publication lists
+
+FORMATTING REQUIREMENTS:
+- Arial 11pt font, 0.5" margins minimum
+- No URLs except in specific allowed fields
+- Use PMCID for NIH-funded publications
+- Personal Statement must connect YOUR expertise to THIS project`;
+    
+
+    const userPrompt = `Generate a complete NIH Biosketch using the 2025 Common Forms format for:
 
 Name: ${name}
+eRA Commons ID: ${eraCommons || '[TO BE ADDED]'}
 Current Position: ${position}
-Institution: ${institution || 'Not specified'}
-eRA Commons ID: ${eraCommons || 'Not specified'}
+Organization: ${institution || '[TO BE ADDED]'}
 
 Education/Training:
 ${education || 'Please provide education history'}
@@ -52,13 +75,17 @@ Role on Project: ${projectRole || 'Principal Investigator'}
 
 Research Focus Areas: ${researchFocus || 'Not specified'}
 
-Personal Statement Notes (what to emphasize):
+Personal Statement Notes (key points to emphasize):
 ${personalStatement || 'General qualifications for the project'}
 
-Key Publications (to highlight):
+Key Publications (for citations):
 ${publications || 'Will generate placeholder examples'}
 
-Generate a complete, NIH-compliant biosketch with all sections properly formatted.`;
+Generate BOTH documents:
+1. The Biographical Sketch Common Form (Sections A-C)
+2. The NIH Biographical Sketch Supplement (Sections A-C)
+
+Format each section with clear headers. Use proper citation format with PMCIDs where applicable.`;
 
     const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4o',
