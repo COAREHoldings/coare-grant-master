@@ -179,6 +179,43 @@ export const MECHANISMS: Record<string, MechanismConfig> = {
     ],
     attachments: nihBaseAttachments,
   },
+  'R21': {
+    id: 'R21',
+    name: 'NIH R21 Exploratory/Developmental Grant',
+    agency: 'NIH',
+    description: 'Exploratory studies for new approaches. Up to $275K total costs over 2 years. No preliminary data required.',
+    sections: [
+      { type: 'specific_aims', title: 'Specific Aims', pageLimit: 1, description: 'State objectives and specific aims' },
+      { type: 'research_strategy', title: 'Research Strategy', pageLimit: 6, requiredHeadings: ['Significance', 'Innovation', 'Approach'], description: 'Significance, Innovation, and Approach sections' },
+      { type: 'bibliography', title: 'Bibliography & References Cited', pageLimit: 0, description: 'No page limit - list all references' },
+    ],
+    attachments: nihBaseAttachments,
+  },
+  'R03': {
+    id: 'R03',
+    name: 'NIH R03 Small Grant',
+    agency: 'NIH',
+    description: 'Limited pilot or feasibility studies. Up to $50K/year for 2 years.',
+    sections: [
+      { type: 'specific_aims', title: 'Specific Aims', pageLimit: 1, description: 'State objectives and specific aims' },
+      { type: 'research_strategy', title: 'Research Strategy', pageLimit: 6, requiredHeadings: ['Significance', 'Innovation', 'Approach'], description: 'Significance, Innovation, and Approach sections' },
+      { type: 'bibliography', title: 'Bibliography & References Cited', pageLimit: 0, description: 'No page limit - list all references' },
+    ],
+    attachments: nihBaseAttachments,
+  },
+  'K99_R00': {
+    id: 'K99_R00',
+    name: 'NIH K99/R00 Pathway to Independence Award',
+    agency: 'NIH',
+    description: 'Transition award for postdocs to independent faculty positions. Up to 5 years total.',
+    sections: [
+      { type: 'specific_aims', title: 'Specific Aims', pageLimit: 1, description: 'State objectives and specific aims' },
+      { type: 'research_strategy', title: 'Research Strategy', pageLimit: 12, requiredHeadings: ['Significance', 'Innovation', 'Approach'], description: 'Research plan for K99 and R00 phases' },
+      { type: 'career_development', title: 'Candidate Information and Goals', pageLimit: 6, description: 'Career goals, training, and mentorship plan' },
+      { type: 'bibliography', title: 'Bibliography & References Cited', pageLimit: 0, description: 'No page limit' },
+    ],
+    attachments: [...nihBaseAttachments, { name: 'Mentor Statement', required: true, description: 'Letter from mentor describing training plan' }],
+  },
 
   // ============ DoD CDMRP MECHANISMS ============
   'DOD_IDEA': {
@@ -405,13 +442,18 @@ export const MECHANISMS: Record<string, MechanismConfig> = {
   },
 };
 
-// Agency-specific formatting requirements
+// Agency-specific formatting requirements (Updated January 2026)
 export const NIH_FORMATTING = {
-  margins: '0.5 inches',
-  font: 'Arial',
+  margins: '0.5 inches minimum',
+  font: 'Arial, Helvetica, Palatino Linotype, or Georgia',
   fontSize: 11,
   lineSpacing: 'single',
   headerFooter: 'No headers/footers in page count',
+  // 2025 Policy Updates
+  biosketchFormat: 'Common Form + NIH Supplement via SciENcv (effective May 25, 2025)',
+  applicationLimit: '6 applications per PI per calendar year (effective Sept 25, 2025)',
+  pdfRequirement: 'All attachments must be PDF format',
+  characterDensity: 'No more than 15 characters per inch',
 };
 
 export const DOD_FORMATTING = {
