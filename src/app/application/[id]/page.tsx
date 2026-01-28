@@ -11,6 +11,8 @@ import ReviewerSimulation from '@/components/ReviewerSimulation';
 import StudySectionRecommender from '@/components/StudySectionRecommender';
 import Collaborators from '@/components/Collaborators';
 import BiosketchGenerator from '@/components/BiosketchGenerator';
+import IdeaLab from '@/components/IdeaLab';
+import CREDashboard from '@/components/CREDashboard';
 import { MECHANISMS, getFormatting } from '@/lib/mechanisms';
 import { ArrowLeft, FileText, Info, Users } from 'lucide-react';
 import Link from 'next/link';
@@ -224,11 +226,22 @@ function ApplicationContent() {
               onExportZip={handleExportZip}
             />
 
+            <IdeaLab
+              mechanism={application.mechanism}
+              onComplete={(data) => console.log('Idea Lab completed:', data)}
+            />
+
+            <CREDashboard
+              title={application.title}
+              specificAims={sections.find(s => s.type === 'specific_aims')?.content || ''}
+              researchStrategy={sections.find(s => s.type === 'research_strategy')?.content || ''}
+              mechanism={application.mechanism}
+            />
+
             <StudySectionRecommender
               title={application.title}
               specificAims={sections.find(s => s.type === 'specific_aims')?.content || ''}
               researchStrategy={sections.find(s => s.type === 'research_strategy')?.content || ''}
-            />
 
             <Collaborators
               applicationId={application.id}
